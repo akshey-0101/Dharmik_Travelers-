@@ -1,0 +1,16 @@
+'use client'
+import {useEffect,useState} from 'react'
+import Link from 'next/link'
+import {getSupabaseBrowser} from '@/lib/supabase-browser'
+
+type Booking={id:string;booking_code:string;customer_name:string;phone:string;passengers:number;pickup_point:string;amount:number;advance_paid:number;payment_status:string;booking_status:string;created_at:string;trips?:{title:string}|null}
+export default function Admin(){
+ const sb=getSupabaseBrowser(); const [user,setUser]=useState<any>(null); const [email,setEmail]=useState(''); const [password,setPassword]=useState(''); const [bookings,setBookings]=useState<Booking[]>([]); const [error,setError]=useState('')
+ async function load(){if(!sb)return; const {data:{user}}=await sb.auth.getUser();setUser(user); if(user){const r=await sb.from('bookings').select('*,trips(title)').order('created_at',{ascending:false}).limit(100);if(r.error)setError(r.error.message);else setBookings((r.data||[]) as Booking[])}}
+ useEffect(()=>{load()},[])
+ async function login(e:React.FormEvent){e.preventDefault();if(!sb)return;const r=await sb.auth.signInWithPassword({email,password});if(r.error)setError(r.error.message);else load()}
+ async function logout(){await sb?.auth.signOut();setUser(null)}
+ if(!sb)return <main><div className="container pagePad"><h1 className="pageTitle">Admin setup required</h1><p className="lead">Add Supabase environment variables first.</p></div></main>
+ if(!user)return <main><div className="container pagePad"><Link href="/">← Home</Link><div className="form narrow"><div className="eyebrow">Private dashboard</div><h1 className="pageTitle small">Admin Login</h1><form onSubmit={login}><div className="field"><label>Email</label><input type="email" required value={email} onChange={e=>setEmail(e.target.value)}/></div><div className="field"><label>Password</label><input type="password" required value={password} onChange={e=>setPassword(e.target.value)}/></div>{error&&<div className="error">{error}</div>}<button className="btn primary fullBtn">Sign in</button></form></div></div></main>
+ return <main><div className="container pagePad"><div className="adminTop"><div><div className="eyebrow">Dharmik Yatra</div><h1 className="pageTitle small">Booking Dashboard</h1></div><button className="btn secondary" onClick={logout}>Logout</button></div><div className="stats"><div><span>Bookings</span><strong>{bookings.length}</strong></div><div><span>Passengers</span><strong>{bookings.reduce((a,b)=>a+b.passengers,0)}</strong></div><div><span>Booking value</span><strong>₹{bookings.reduce((a,b)=>a+(b.amount||0),0).toLocaleString('en-IN')}</strong></div></div><div className="tableWrap"><table className="adminTable"><thead><tr><th>Booking</th><th>Customer</th><th>Trip</th><th>People</th><th>Pickup</th><th>Amount</th><th>Status</th></tr></thead><tbody>{bookings.map(b=><tr key={b.id}><td><strong>{b.booking_code}</strong><br/><small>{new Date(b.created_at).toLocaleString('en-IN')}</small></td><td>{b.customer_name}<br/>{b.phone}</td><td>{b.trips?.title||'—'}</td><td>{b.passengers}</td><td>{b.pickup_point}</td><td>₹{(b.amount||0).toLocaleString('en-IN')}</td><td><span className="pill">{b.booking_status}</span></td></tr>)}</tbody></table></div></div></main>
+}
