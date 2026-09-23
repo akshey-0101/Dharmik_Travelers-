@@ -21,34 +21,43 @@ type Booking = {
 
 type Trip = {
   id: string
-  title: string
   slug: string
-  description: string | null
-  destination: string | null
-  duration: string | null
+  title: string
+  travel_date: string | null
   price: number
-  is_published: boolean
-  created_at?: string
+  capacity: number
+  pickup_points: string[] | null
+  places: string[] | null
+  included: string[] | null
+  not_included: string[] | null
+  status: string
+  created_at: string
 }
 
 type TripForm = {
-  title: string
   slug: string
-  description: string
-  destination: string
-  duration: string
+  title: string
+  travel_date: string
   price: string
-  is_published: boolean
+  capacity: string
+  pickup_points: string
+  places: string
+  included: string
+  not_included: string
+  status: 'draft' | 'published'
 }
 
 const emptyTrip: TripForm = {
-  title: '',
   slug: '',
-  description: '',
-  destination: '',
-  duration: '',
+  title: '',
+  travel_date: '',
   price: '',
-  is_published: true,
+  capacity: '40',
+  pickup_points: '',
+  places: '',
+  included: '',
+  not_included: '',
+  status: 'published',
 }
 
 export default function Admin() {
@@ -61,7 +70,8 @@ export default function Admin() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [trips, setTrips] = useState<Trip[]>([])
 
-  const [activeTab, setActiveTab] = useState<'bookings' | 'trips'>('bookings')
+  const [activeTab, setActiveTab] =
+    useState<'bookings' | 'trips'>('bookings')
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -74,9 +84,9 @@ export default function Admin() {
 
   const [tripForm, setTripForm] = useState<TripForm>(emptyTrip)
 
-  /* =====================================================
-     LOAD DATA
-     ===================================================== */
+  /* =========================================================
+     LOAD ADMIN DATA
+     ========================================================= */
 
   async function load() {
     if (!sb) return
@@ -119,9 +129,9 @@ export default function Admin() {
     load()
   }, [])
 
-  /* =====================================================
+  /* =========================================================
      LOGIN
-     ===================================================== */
+     ========================================================= */
 
   async function login(e: React.FormEvent) {
     e.preventDefault()
@@ -146,9 +156,9 @@ export default function Admin() {
     await load()
   }
 
-  /* =====================================================
+  /* =========================================================
      LOGOUT
-     ===================================================== */
+     ========================================================= */
 
   async function logout() {
     await sb?.auth.signOut()
@@ -158,9 +168,9 @@ export default function Admin() {
     setTrips([])
   }
 
-  /* =====================================================
-     TRIP FORM HELPERS
-     ===================================================== */
+  /* =========================================================
+     SLUG GENERATOR
+     ========================================================= */
 
   function makeSlug(value: string) {
     return value
@@ -171,9 +181,30 @@ export default function Admin() {
       .replace(/-+/g, '-')
   }
 
+  /* =========================================================
+     JSON ARRAY HELPERS
+     ========================================================= */
+
+  function arrayToText(value: string[] | null | undefined) {
+    if (!value || !Array.isArray(value)) return ''
+
+    return value.join('\n')
+  }
+
+  function textToArray(value: string) {
+    return value
+      .split('\n')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  /* =========================================================
+     UPDATE FORM
+     ========================================================= */
+
   function updateTripField(
     field: keyof TripForm,
-    value: string | boolean
+    value: string
   ) {
     setTripForm((previous) => ({
       ...previous,
@@ -181,25 +212,44 @@ export default function Admin() {
     }))
   }
 
+  /* =========================================================
+     ADD TRIP
+     ========================================================= */
+
   function startAddTrip() {
     setEditingTripId(null)
     setTripForm(emptyTrip)
     setError('')
     setSuccess('')
     setShowTripForm(true)
+
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    })
   }
+
+  /* =========================================================
+     EDIT TRIP
+     ========================================================= */
 
   function startEditTrip(trip: Trip) {
     setEditingTripId(trip.id)
 
     setTripForm({
-      title: trip.title || '',
       slug: trip.slug || '',
-      description: trip.description || '',
-      destination: trip.destination || '',
-      duration: trip.duration || '',
-      price: String(trip.price ?? ''),
-      is_published: trip.is_published ?? true,
+      title: trip.title || '',
+      travel_date: trip.travel_date || '',
+      price: String(trip.price ?? 0),
+      capacity: String(trip.capacity ?? 40),
+      pickup_points: arrayToText(trip.pickup_points),
+      places: arrayToText(trip.places),
+      included: arrayToText(trip.included),
+      not_included: arrayToText(trip.not_included),
+      status:
+        trip.status === 'published'
+          ? 'published'
+          : 'draft',
     })
 
     setError('')
@@ -212,6 +262,10 @@ export default function Admin() {
     })
   }
 
+  /* =========================================================
+     CANCEL EDIT
+     ========================================================= */
+
   function cancelTripForm() {
     setShowTripForm(false)
     setEditingTripId(null)
@@ -219,9 +273,9 @@ export default function Admin() {
     setError('')
   }
 
-  /* =====================================================
-     CREATE / UPDATE TRIP
-     ===================================================== */
+  /* =========================================================
+     SAVE TRIP
+     ========================================================= */
 
   async function saveTrip(e: React.FormEvent) {
     e.preventDefault()
@@ -238,8 +292,8 @@ export default function Admin() {
       return
     }
 
-    if (!tripForm.destination.trim()) {
-      setError('Destination is required.')
+    if (!tripForm.slug.trim()) {
+      setError('Trip slug is required.')
       setTripLoading(false)
       return
     }
@@ -252,14 +306,37 @@ export default function Admin() {
       return
     }
 
+    const capacity = Number(tripForm.capacity)
+
+    if (
+      Number.isNaN(capacity) ||
+      capacity < 1
+    ) {
+      setError('Capacity must be at least 1.')
+      setTripLoading(false)
+      return
+    }
+
     const payload = {
+      slug: tripForm.slug.trim(),
       title: tripForm.title.trim(),
-      slug: tripForm.slug.trim() || makeSlug(tripForm.title),
-      description: tripForm.description.trim() || null,
-      destination: tripForm.destination.trim(),
-      duration: tripForm.duration.trim() || null,
+      travel_date:
+        tripForm.travel_date.trim() || null,
       price,
-      is_published: tripForm.is_published,
+      capacity,
+      pickup_points: textToArray(
+        tripForm.pickup_points
+      ),
+      places: textToArray(
+        tripForm.places
+      ),
+      included: textToArray(
+        tripForm.included
+      ),
+      not_included: textToArray(
+        tripForm.not_included
+      ),
+      status: tripForm.status,
     }
 
     let result
@@ -295,15 +372,15 @@ export default function Admin() {
     await load()
   }
 
-  /* =====================================================
+  /* =========================================================
      DELETE TRIP
-     ===================================================== */
+     ========================================================= */
 
   async function deleteTrip(trip: Trip) {
     if (!sb) return
 
     const confirmed = window.confirm(
-      `Delete "${trip.title}"?\n\nThis action cannot be undone.`
+      `Delete "${trip.title}"?\n\nThis cannot be undone.`
     )
 
     if (!confirmed) return
@@ -326,12 +403,17 @@ export default function Admin() {
     await load()
   }
 
-  /* =====================================================
+  /* =========================================================
      PUBLISH / UNPUBLISH
-     ===================================================== */
+     ========================================================= */
 
-  async function togglePublished(trip: Trip) {
+  async function toggleTripStatus(trip: Trip) {
     if (!sb) return
+
+    const newStatus =
+      trip.status === 'published'
+        ? 'draft'
+        : 'published'
 
     setError('')
     setSuccess('')
@@ -339,7 +421,7 @@ export default function Admin() {
     const result = await sb
       .from('trips')
       .update({
-        is_published: !trip.is_published,
+        status: newStatus,
       })
       .eq('id', trip.id)
 
@@ -349,17 +431,17 @@ export default function Admin() {
     }
 
     setSuccess(
-      trip.is_published
-        ? 'Trip unpublished.'
-        : 'Trip published.'
+      newStatus === 'published'
+        ? 'Trip published.'
+        : 'Trip moved to draft.'
     )
 
     await load()
   }
 
-  /* =====================================================
-     SUPABASE SETUP CHECK
-     ===================================================== */
+  /* =========================================================
+     SUPABASE CHECK
+     ========================================================= */
 
   if (!sb) {
     return (
@@ -377,9 +459,9 @@ export default function Admin() {
     )
   }
 
-  /* =====================================================
-     LOGIN SCREEN
-     ===================================================== */
+  /* =========================================================
+     LOGIN
+     ========================================================= */
 
   if (!user) {
     return (
@@ -433,7 +515,9 @@ export default function Admin() {
                 className="btn primary fullBtn"
                 disabled={loading}
               >
-                {loading ? 'Signing in...' : 'Sign in'}
+                {loading
+                  ? 'Signing in...'
+                  : 'Sign in'}
               </button>
             </form>
           </div>
@@ -442,9 +526,9 @@ export default function Admin() {
     )
   }
 
-  /* =====================================================
+  /* =========================================================
      ADMIN DASHBOARD
-     ===================================================== */
+     ========================================================= */
 
   return (
     <main>
@@ -482,8 +566,8 @@ export default function Admin() {
             }
             onClick={() => {
               setActiveTab('bookings')
-              setSuccess('')
               setError('')
+              setSuccess('')
             }}
           >
             Bookings
@@ -497,15 +581,15 @@ export default function Admin() {
             }
             onClick={() => {
               setActiveTab('trips')
-              setSuccess('')
               setError('')
+              setSuccess('')
             }}
           >
             Trips
           </button>
         </div>
 
-        {/* GLOBAL MESSAGES */}
+        {/* MESSAGES */}
 
         {error && (
           <div className="error">
@@ -519,13 +603,14 @@ export default function Admin() {
           </div>
         )}
 
-        {/* =================================================
+        {/* =====================================================
             BOOKINGS
-           ================================================= */}
+           ===================================================== */}
 
         {activeTab === 'bookings' && (
           <>
             <div className="stats">
+
               <div>
                 <span>Bookings</span>
 
@@ -539,7 +624,8 @@ export default function Admin() {
 
                 <strong>
                   {bookings.reduce(
-                    (a, b) => a + b.passengers,
+                    (total, booking) =>
+                      total + booking.passengers,
                     0
                   )}
                 </strong>
@@ -552,16 +638,20 @@ export default function Admin() {
                   ₹
                   {bookings
                     .reduce(
-                      (a, b) => a + (b.amount || 0),
+                      (total, booking) =>
+                        total +
+                        (booking.amount || 0),
                       0
                     )
                     .toLocaleString('en-IN')}
                 </strong>
               </div>
+
             </div>
 
             <div className="tableWrap">
               <table className="adminTable">
+
                 <thead>
                   <tr>
                     <th>Booking</th>
@@ -575,73 +665,98 @@ export default function Admin() {
                 </thead>
 
                 <tbody>
-                  {bookings.map((b) => (
-                    <tr key={b.id}>
+
+                  {bookings.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        style={{
+                          textAlign: 'center',
+                          padding: '35px',
+                        }}
+                      >
+                        No bookings yet.
+                      </td>
+                    </tr>
+                  )}
+
+                  {bookings.map((booking) => (
+                    <tr key={booking.id}>
+
                       <td>
                         <strong>
-                          {b.booking_code}
+                          {booking.booking_code}
                         </strong>
 
                         <br />
 
                         <small>
                           {new Date(
-                            b.created_at
-                          ).toLocaleString('en-IN')}
+                            booking.created_at
+                          ).toLocaleString(
+                            'en-IN'
+                          )}
                         </small>
                       </td>
 
                       <td>
-                        {b.customer_name}
+                        {booking.customer_name}
                         <br />
-                        {b.phone}
+                        {booking.phone}
                       </td>
 
                       <td>
-                        {b.trips?.title || '—'}
+                        {booking.trips?.title ||
+                          '—'}
                       </td>
 
                       <td>
-                        {b.passengers}
+                        {booking.passengers}
                       </td>
 
                       <td>
-                        {b.pickup_point}
+                        {booking.pickup_point}
                       </td>
 
                       <td>
                         ₹
-                        {(b.amount || 0).toLocaleString(
+                        {(
+                          booking.amount || 0
+                        ).toLocaleString(
                           'en-IN'
                         )}
                       </td>
 
                       <td>
                         <span className="pill">
-                          {b.booking_status}
+                          {booking.booking_status}
                         </span>
                       </td>
+
                     </tr>
                   ))}
+
                 </tbody>
               </table>
             </div>
           </>
         )}
 
-        {/* =================================================
+        {/* =====================================================
             TRIPS
-           ================================================= */}
+           ===================================================== */}
 
         {activeTab === 'trips' && (
           <>
+
             <div className="adminSectionHeader">
+
               <div>
                 <h2>Trips</h2>
 
                 <p>
-                  Create and manage the yatras shown on
-                  your website.
+                  Add and manage all Dharmik Yatra
+                  trips from here.
                 </p>
               </div>
 
@@ -651,13 +766,16 @@ export default function Admin() {
               >
                 + Add Trip
               </button>
+
             </div>
 
-            {/* TRIP FORM */}
+            {/* TRIP EDITOR */}
 
             {showTripForm && (
               <div className="adminEditor">
+
                 <div className="adminEditorHeader">
+
                   <div>
                     <div className="eyebrow">
                       {editingTripId
@@ -673,19 +791,23 @@ export default function Admin() {
                   </div>
 
                   <button
-                    className="btn secondary"
                     type="button"
+                    className="btn secondary"
                     onClick={cancelTripForm}
                   >
                     Cancel
                   </button>
+
                 </div>
 
                 <form
                   className="form"
                   onSubmit={saveTrip}
                 >
+
                   <div className="formGrid">
+
+                    {/* TITLE */}
 
                     <div className="field full">
                       <label>
@@ -695,35 +817,36 @@ export default function Admin() {
                       <input
                         type="text"
                         required
-                        placeholder="Golu Devta, Kainchi Dham & Mukteshwar"
+                        placeholder="Golu Devta • Kainchi Dham • Mukteshwar"
                         value={tripForm.title}
                         onChange={(e) => {
                           const title =
                             e.target.value
 
-                          updateTripField(
-                            'title',
-                            title
-                          )
-
-                          if (!editingTripId) {
-                            setTripForm((previous) => ({
+                          setTripForm(
+                            (previous) => ({
                               ...previous,
                               title,
-                              slug: makeSlug(title),
-                            }))
-                          }
+                              slug:
+                                editingTripId
+                                  ? previous.slug
+                                  : makeSlug(title),
+                            })
+                          )
                         }}
                       />
                     </div>
 
+                    {/* SLUG */}
+
                     <div className="field">
                       <label>
-                        Slug
+                        Slug *
                       </label>
 
                       <input
                         type="text"
+                        required
                         placeholder="golu-kainchi-mukteshwar"
                         value={tripForm.slug}
                         onChange={(e) =>
@@ -733,44 +856,34 @@ export default function Admin() {
                           )
                         }
                       />
+
+                      <small>
+                        Used in the trip URL.
+                      </small>
                     </div>
+
+                    {/* DATE */}
 
                     <div className="field">
                       <label>
-                        Destination *
+                        Travel Date
                       </label>
 
                       <input
-                        type="text"
-                        required
-                        placeholder="Uttarakhand"
-                        value={tripForm.destination}
+                        type="date"
+                        value={
+                          tripForm.travel_date
+                        }
                         onChange={(e) =>
                           updateTripField(
-                            'destination',
+                            'travel_date',
                             e.target.value
                           )
                         }
                       />
                     </div>
 
-                    <div className="field">
-                      <label>
-                        Duration
-                      </label>
-
-                      <input
-                        type="text"
-                        placeholder="1 Day / 1 Night"
-                        value={tripForm.duration}
-                        onChange={(e) =>
-                          updateTripField(
-                            'duration',
-                            e.target.value
-                          )
-                        }
-                      />
-                    </div>
+                    {/* PRICE */}
 
                     <div className="field">
                       <label>
@@ -792,50 +905,172 @@ export default function Admin() {
                       />
                     </div>
 
-                    <div className="field full">
+                    {/* CAPACITY */}
+
+                    <div className="field">
                       <label>
-                        Description
+                        Bus / Trip Capacity *
                       </label>
 
-                      <textarea
-                        placeholder="Describe the yatra, destinations, food, transport and other details..."
-                        value={tripForm.description}
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        value={
+                          tripForm.capacity
+                        }
                         onChange={(e) =>
                           updateTripField(
-                            'description',
+                            'capacity',
                             e.target.value
                           )
                         }
                       />
                     </div>
 
-                    <div className="field full">
-                      <label className="checkboxField">
-                        <input
-                          type="checkbox"
-                          checked={
-                            tripForm.is_published
-                          }
-                          onChange={(e) =>
-                            updateTripField(
-                              'is_published',
-                              e.target.checked
-                            )
-                          }
-                        />
+                    {/* PICKUP POINTS */}
 
-                        <span>
-                          Publish this trip on
-                          the website
-                        </span>
+                    <div className="field full">
+                      <label>
+                        Pickup Points
                       </label>
+
+                      <textarea
+                        placeholder={
+                          'One pickup point per line\nShahdara, Delhi\nAnand Vihar\nKarkardooma'
+                        }
+                        value={
+                          tripForm.pickup_points
+                        }
+                        onChange={(e) =>
+                          updateTripField(
+                            'pickup_points',
+                            e.target.value
+                          )
+                        }
+                      />
+
+                      <small>
+                        Enter one pickup point
+                        per line.
+                      </small>
+                    </div>
+
+                    {/* PLACES */}
+
+                    <div className="field full">
+                      <label>
+                        Places / Temples Covered
+                      </label>
+
+                      <textarea
+                        placeholder={
+                          'One place per line\nGolu Devta\nKainchi Dham\nMukteshwar'
+                        }
+                        value={
+                          tripForm.places
+                        }
+                        onChange={(e) =>
+                          updateTripField(
+                            'places',
+                            e.target.value
+                          )
+                        }
+                      />
+
+                      <small>
+                        Enter one destination per
+                        line.
+                      </small>
+                    </div>
+
+                    {/* INCLUDED */}
+
+                    <div className="field">
+                      <label>
+                        Included
+                      </label>
+
+                      <textarea
+                        placeholder={
+                          'Round-trip bus\nTea / breakfast\nTour coordinator'
+                        }
+                        value={
+                          tripForm.included
+                        }
+                        onChange={(e) =>
+                          updateTripField(
+                            'included',
+                            e.target.value
+                          )
+                        }
+                      />
+
+                      <small>
+                        One item per line.
+                      </small>
+                    </div>
+
+                    {/* NOT INCLUDED */}
+
+                    <div className="field">
+                      <label>
+                        Not Included
+                      </label>
+
+                      <textarea
+                        placeholder={
+                          'Personal expenses\nSpecial darshan charges'
+                        }
+                        value={
+                          tripForm.not_included
+                        }
+                        onChange={(e) =>
+                          updateTripField(
+                            'not_included',
+                            e.target.value
+                          )
+                        }
+                      />
+
+                      <small>
+                        One item per line.
+                      </small>
+                    </div>
+
+                    {/* STATUS */}
+
+                    <div className="field full">
+                      <label>
+                        Trip Status
+                      </label>
+
+                      <select
+                        value={
+                          tripForm.status
+                        }
+                        onChange={(e) =>
+                          updateTripField(
+                            'status',
+                            e.target.value
+                          )
+                        }
+                      >
+                        <option value="published">
+                          Published — visible on website
+                        </option>
+
+                        <option value="draft">
+                          Draft — hidden from website
+                        </option>
+                      </select>
                     </div>
 
                   </div>
 
                   <button
-                    className="btn primary"
                     type="submit"
+                    className="btn primary"
                     disabled={tripLoading}
                   >
                     {tripLoading
@@ -844,50 +1079,48 @@ export default function Admin() {
                         ? 'Save Changes'
                         : 'Create Trip'}
                   </button>
+
                 </form>
               </div>
             )}
 
-            {/* TRIP TABLE */}
+            {/* TRIPS TABLE */}
 
             <div className="tableWrap">
+
               <table className="adminTable">
+
                 <thead>
                   <tr>
                     <th>Trip</th>
-                    <th>Destination</th>
-                    <th>Duration</th>
+                    <th>Date</th>
                     <th>Price</th>
+                    <th>Capacity</th>
+                    <th>Places</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
 
                 <tbody>
+
                   {trips.length === 0 && (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         style={{
                           textAlign: 'center',
-                          padding: '35px',
+                          padding: '40px',
                         }}
                       >
                         No trips found.
-                        <br />
-                        <br />
-                        Click
-                        <strong>
-                          {' '}
-                          + Add Trip{' '}
-                        </strong>
-                        to create your first yatra.
                       </td>
                     </tr>
                   )}
 
                   {trips.map((trip) => (
                     <tr key={trip.id}>
+
                       <td>
                         <strong>
                           {trip.title}
@@ -901,29 +1134,49 @@ export default function Admin() {
                       </td>
 
                       <td>
-                        {trip.destination || '—'}
-                      </td>
-
-                      <td>
-                        {trip.duration || '—'}
+                        {trip.travel_date
+                          ? new Date(
+                              trip.travel_date +
+                                'T00:00:00'
+                            ).toLocaleDateString(
+                              'en-IN',
+                              {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                              }
+                            )
+                          : '—'}
                       </td>
 
                       <td>
                         ₹
                         {Number(
                           trip.price || 0
-                        ).toLocaleString('en-IN')}
+                        ).toLocaleString(
+                          'en-IN'
+                        )}
+                      </td>
+
+                      <td>
+                        {trip.capacity}
+                      </td>
+
+                      <td>
+                        {trip.places?.length || 0}
                       </td>
 
                       <td>
                         <span
                           className={
-                            trip.is_published
+                            trip.status ===
+                            'published'
                               ? 'pill'
                               : 'pill unpublished'
                           }
                         >
-                          {trip.is_published
+                          {trip.status ===
+                          'published'
                             ? 'Published'
                             : 'Draft'}
                         </span>
@@ -935,7 +1188,9 @@ export default function Admin() {
                           <button
                             className="btn secondary"
                             onClick={() =>
-                              startEditTrip(trip)
+                              startEditTrip(
+                                trip
+                              )
                             }
                           >
                             Edit
@@ -944,10 +1199,13 @@ export default function Admin() {
                           <button
                             className="btn secondary"
                             onClick={() =>
-                              togglePublished(trip)
+                              toggleTripStatus(
+                                trip
+                              )
                             }
                           >
-                            {trip.is_published
+                            {trip.status ===
+                            'published'
                               ? 'Unpublish'
                               : 'Publish'}
                           </button>
@@ -963,11 +1221,14 @@ export default function Admin() {
 
                         </div>
                       </td>
+
                     </tr>
                   ))}
+
                 </tbody>
               </table>
             </div>
+
           </>
         )}
 
