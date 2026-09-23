@@ -41,3 +41,27 @@ values
 ('khatu-shyam','Khatu Shyam Ji Darshan Yatra',1499,40,'["Delhi NCR"]','["Khatu Shyam Ji"]','["Round-trip transportation","Listed pickup points","Tour coordinator"]','["Personal expenses","Optional paid services"]','draft'),
 ('balaji-salasar','Mehandipur Balaji • Salasar Balaji',1499,40,'["Delhi NCR"]','["Mehandipur Balaji","Salasar Balaji"]','["Round-trip transportation","Listed pickup points","Tour coordinator"]','["Personal expenses","Optional paid services"]','draft')
 on conflict (slug) do update set title=excluded.title, price=excluded.price;
+
+
+
+
+
+ALTER TABLE public.trips
+ADD COLUMN IF NOT EXISTS included jsonb DEFAULT '[]'::jsonb;
+
+ALTER TABLE public.trips
+ADD COLUMN IF NOT EXISTS not_included jsonb DEFAULT '[]'::jsonb;
+
+ALTER TABLE public.trips
+ADD COLUMN IF NOT EXISTS pickup_points jsonb DEFAULT '[]'::jsonb;
+
+ALTER TABLE public.trips
+ADD COLUMN IF NOT EXISTS places jsonb DEFAULT '[]'::jsonb;
+
+NOTIFY pgrst, 'reload schema';
+
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public'
+AND table_name = 'trips'
+ORDER BY ordinal_position;
